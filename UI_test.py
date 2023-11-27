@@ -107,6 +107,33 @@ def update_or_append_data(gc, sheet_url, user_input, action):
         worksheet.append_row(list(user_input.values()))
         st.success("Data appended to Google Sheets.")
 
+def load_previous_evaluations(gc, sheet_url, userID):
+    evaluations = []
+
+    # Open the Google Sheet by URL
+    sh = gc.open_by_url(sheet_url)
+
+    # Select a specific worksheet (you can replace 'Sheet1' with your actual sheet name)
+    worksheet = sh.worksheet('Sheet1')
+
+    # Get all the data from the worksheet
+    values = worksheet.get_all_values()
+
+    # Find evaluations for the given userID
+    for row in values:
+        if len(row) >= 2 and row[0] == userID:
+            postID = row[1]
+            commentID = row[2]
+            q1 = row[3]
+            q2 = row[4]
+            q3 = row[5]
+            q4 = row[6]
+            q5 = row[7]
+            full_eval = {"Username": userID, "Reddit Post ID": postID, "Comment ID": commentID, "Q1": q1, "Q2": q2, "Q3": q3, "Q4": q4, "Q5": q5}
+            evaluations.append(((userID, postID, commentID), full_eval))
+
+    return evaluations
+
 def preprocess_json_data(data):
     new_data = {}
     for subreddit, posts in data.items():
@@ -135,7 +162,7 @@ def preprocess_json_data(data):
 
     return new_data
 
-def load_random_post(selected_subreddit):
+def load_random_post(selected_subreddit, userID):
     if selected_subreddit in data:
         all_posts = data[selected_subreddit]
         if all_posts:
@@ -144,8 +171,12 @@ def load_random_post(selected_subreddit):
                 post for post in all_posts
                 if post.get('comments') != "[Removed]"  # Check if comments are not "[Removed]"
                 and post.get('comments') and not all(comment['author'] == 'AutoModerator' or comment['author'] == 'None' for comment in post['comments'])
+                and (userID, post.get('id'), post.get('comment_index')) not in session_state._state
             ]
             if valid_posts:
+
+                # Should I add functionality here to add the random_post to a list and to choose a different choice if the valid post has already been shown?
+
                 random_post = random.choice(valid_posts)
                 return random_post
     return None
@@ -211,6 +242,22 @@ with st.container():
     userID = st.sidebar.text_input('Your UserID', value="", max_chars=None, key=None, type="default", help=None, autocomplete=None, on_change=None, args=None, kwargs=None, placeholder=None, disabled=False, label_visibility="visible")
 
     if userID:
+
+        # Load previous evaluations for the user
+        user_evaluations = load_previous_evaluations(gc, sheet_url, userID)
+
+        # Add the user's previous evaluations to the session state
+        for evaluations in user_evaluations:
+            if evaluations[0] not in session_state._state:
+                session_state.set(evaluations[0], evaluations[1])
+
+        # I would already have all of the data split up head of time. How should I access it?
+        # Could take selected_subreddit as a string and concatenate to front of '_output.json'
+        # Would need to maybe add to session state?
+        # load_random_post currently adds a single random post to session state. Maybe I should add preprocessing to scrape sheets and not load in a certain postID, commentID if already seen
+        # list will be ongoing after the preprocess
+        # max file size: 25 MB per file
+
         # Load your JSON data
         with open('reddit_data1.json', 'r') as json_file:
             data = json.load(json_file)
@@ -224,7 +271,7 @@ with st.container():
                 st.session_state.random_post = None
 
             # Load a new random post and store it in the session state
-            st.session_state.random_post = load_random_post(selected_subreddit)
+            st.session_state.random_post = load_random_post(selected_subreddit, userID)
 
         # Get the updated random_post
         random_post = st.session_state.random_post
@@ -255,7 +302,6 @@ with st.container():
                         st.write("Click on URL to see image. Cannot display here.")
 
                 # Display the post content
-                print(random_post)
                 st.write("Post Content:", random_post.get('selftext'))
 
                 st.write("Comments:")
