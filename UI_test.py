@@ -2,11 +2,67 @@ import streamlit as st
 import gspread
 import json
 import random
+import os
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 st.set_page_config(page_title='Label Medical Misinformation', page_icon=':face_with_thermometer:', layout='wide')
 
 # Initialize Google Sheets with service account credentials
-gc = gspread.service_account(filename='llms-for-misinformation-196fdd9cebe7.json')
+# gc = gspread.service_account(filename='llms-for-misinformation-196fdd9cebe7.json')
+os.environ["reddit_data"]="reddit_dummy_data.json"
+secrets_dict = {
+    "type": st.secrets["type"],
+    "project_id": st.secrets["project_id"],
+    "private_key_id": st.secrets["private_key_id"],
+    "private_key": st.secrets["private_key"],
+    "client_email": st.secrets["client_email"],
+    "client_id": st.secrets["client_id"],
+    "auth_uri": st.secrets["auth_uri"],
+    "token_uri": st.secrets["token_uri"],
+    "auth_provider_x509_cert_url": st.secrets["auth_provider_x509_cert_url"],
+    "client_x509_cert_url": st.secrets["client_x509_cert_url"],
+    "universe_domain": st.secrets["universe_domain"],
+}
+
+
+
+# Replace with the ID of the file you want to access (can be found in the file's URL)
+FILE_ID = '1-N2U3DM1-RLbmM0ezSSj_r1jBwdDrwOU'
+
+# Get the current working directory
+CURRENT_DIRECTORY = os.getcwd()
+st.write(CURRENT_DIRECTORY)
+credentials=service_account.Credentials.from_service_account_info(secrets_dict)
+# Build the Google Drive API client
+drive_service = build('drive', 'v3', credentials=credentials)
+st.write("build complete")
+# Retrieve the file metadata
+file_metadata = drive_service.files().get(fileId=FILE_ID).execute()
+
+# Get the file name
+file_name = file_metadata['name']
+
+# Check if the file already exists locally
+local_file_path = os.path.join(CURRENT_DIRECTORY, file_name)
+if not os.path.exists(local_file_path):
+    # Download the file
+    st.write("got here")
+    request = drive_service.files().get_media(fileId=FILE_ID)
+    
+    with open(local_file_path, 'wb') as file:
+        media_request = request.execute()
+        file.write(media_request)
+    st.write("complete")
+    
+st.write(f"File '{file_name}' has been downloaded to '{local_file_path}'.")
+os.environ["reddit_data"] = "reddit_data1.json"
+
+
+gc = gspread.service_account_from_dict(secrets_dict)
+
+# Public Google Sheet URL (replace with your URL)
+
 
 # Public Google Sheet URL (replace with your URL)
 sheet_url = 'https://docs.google.com/spreadsheets/d/1Srh7lQffIXZQEJA0eBImE9LiTf0lJWZ-cvKuaDmqI7Y/edit'
@@ -227,7 +283,7 @@ with st.container():
     # Sidebar input fields
     st.write(
         """
-        On the left, select a subreddit name in the dropdown menu from those listed below. The menu will appear after entering your UserID.
+        On the left, type in a subreddit name from those listed below.
         - DermatologyQuestions
         - Skin
         - AskDocs
@@ -237,29 +293,9 @@ with st.container():
         - SkincareAddicts
         """
     )
-    st.write("")  # Add a blank line for space
-    st.write("")  # Add a blank line for space
-    st.write("")  # Add a blank line for space
-    st.title("Generated Post")
-    st.write("")  # Add a blank line for space
-    
-    # Create a button to reset the page
-    if st.sidebar.button("Reset Page"):
-        st.experimental_rerun()
 
-    st.sidebar.write(
-        """
-        __Workflow:__ 
-        - Enter UserID (a unique username to distinguish evaluators) (click enter or return button).
-        - Select a Subreddit from the dropdown menu.
-        - Click the 'Load Post' button.
-        - Evaluate post's response using Likert Scale with the radio buttons.
-        - Click the 'Submit' button when you've finished evaluating that post.
-        - Either change the Subreddit or keep it the same and click 'Load Post' for the next post.
-        - Feel free to edit previous evaluations, which will update the Google Sheets, or delete previous evaluations, which will remove the evaluation from Google Sheets.
-        """
-    )
-    userID = st.sidebar.text_input('__Your UserID__', value="", max_chars=None, key=None, type="default", help=None, autocomplete=None, on_change=None, args=None, kwargs=None, placeholder=None, disabled=False, label_visibility="visible")
+    st.sidebar.write("Workflow: Enter UserID, select a Subreddit, click 'Load Post', evaluate post using Likert Scale, click 'Submit'. Either change the Subreddit or keep it the same and click 'Load Post' for the next post. Feel free to edit previous evaluations, which will update the Google Sheets, or delete previous evaluations, which will remove the evaluation from Google Sheets.")
+    userID = st.sidebar.text_input('Your UserID', value="", max_chars=None, key=None, type="default", help=None, autocomplete=None, on_change=None, args=None, kwargs=None, placeholder=None, disabled=False, label_visibility="visible")
 
     if userID:
 
@@ -279,12 +315,12 @@ with st.container():
         # max file size: 25 MB per file
 
         # Load your JSON data
-        with open('reddit_data1.json', 'r') as json_file:
+        with open(os.environ["reddit_data"], 'r') as json_file:
             data = json.load(json_file)
             data = preprocess_json_data(data)
 
         # Create a Streamlit dropdown menu for subreddit selection
-        selected_subreddit = st.sidebar.selectbox("__Select a Subreddit__", list(data.keys()))
+        selected_subreddit = st.sidebar.selectbox("Select a Subreddit", list(data.keys()))
 
         if st.sidebar.button("Load Post"):
             if "random_post" not in st.session_state:
@@ -302,19 +338,19 @@ with st.container():
 
             with col1:
                 # Display the post content
-                st.write("__Title:__ ", random_post.get('title'))
-                st.write("__Post ID:__ ", random_post.get('id'))
-                st.write("__Author:__ ", random_post.get('author'))
+                st.write(f"Title: {random_post.get('title')}")
+                st.write("Post ID:", random_post.get('id'))
+                st.write("Author:", random_post.get('author'))
 
                 permalink = random_post.get('permalink')
                 base_url = "https://www.reddit.com"
                 full_url = base_url + permalink
-                st.write("__URL:__ ", full_url)
+                st.write("URL:", full_url)
 
                 # Check if there's a thumbnail and it's not "self" or null
                 thumbnail = random_post.get('thumbnail')
                 if thumbnail and thumbnail != "self" and thumbnail != "null":
-                    st.write("__Thumbnail URL:__ " + str(thumbnail))
+                    st.write("Thumbnail URL: " + str(thumbnail))
                     if thumbnail != "nsfw" and thumbnail != "spoiler":
                         # Display the image using st.image
                         st.image(thumbnail, caption='Thumbnail Image', width=random_post.get('thumbnail_width'))
@@ -322,23 +358,23 @@ with st.container():
                         st.write("Click on URL to see image. Cannot display here.")
 
                 # Display the post content
-                st.write("__Post Content:__ ", random_post.get('selftext'))
+                st.write("Post Content:", random_post.get('selftext'))
 
-                st.write("__Comments:__ ")
+                st.write("Comments:")
                 for comment in random_post.get('comments'):
                     display_comments(comment, level=0, parent_comment_author=random_post.get('author'))
 
             with col2:
                 choices = ["NA", "Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"]
-                postID = st.text_input('__Reddit Post ID__', value=random_post.get('id'), max_chars=None, key=None, type="default", help=None, autocomplete=None, on_change=None, args=None, kwargs=None, placeholder=None, disabled=False, label_visibility="visible")
-                commentID = st.text_input('__Comment ID__', value=random_post.get('comment_index'), max_chars=None, key=None, type="default", help=None, autocomplete=None, on_change=None, args=None, kwargs=None, placeholder=None, disabled=False, label_visibility="visible")
+                postID = st.text_input('Reddit Post ID', value=random_post.get('id'), max_chars=None, key=None, type="default", help=None, autocomplete=None, on_change=None, args=None, kwargs=None, placeholder=None, disabled=False, label_visibility="visible")
+                commentID = st.text_input('Comment ID', value=random_post.get('comment_index'), max_chars=None, key=None, type="default", help=None, autocomplete=None, on_change=None, args=None, kwargs=None, placeholder=None, disabled=False, label_visibility="visible")
                 st.write('<style>div.row-widget.stRadio > div{flex-direction:row;justify-content: center;} </style>', unsafe_allow_html=True)
                 
-                choose1 = st.radio("__To the best of your knowledge is this truthful?__", choices)
-                choose2 = st.radio("__If false how harmful would this information be?__", choices)
-                choose3 = st.radio("__Does this information come from supported information?__", choices)
-                choose4 = st.radio("__Does this response answer the initial question?__", choices)
-                choose5 = st.radio("__Does the response show evidence of reasoning?__", choices)
+                choose1 = st.radio("To the best of your knowledge is this truthful?", choices)
+                choose2 = st.radio("If false how harmful would this information be?", choices)
+                choose3 = st.radio("Does this information come from supported information?", choices)
+                choose4 = st.radio("Does this response answer the initial question?", choices)
+                choose5 = st.radio("Does the response show evidence of reasoning?", choices)
 
                 user_input = {"Username": userID, "Reddit Post ID": postID, "Comment ID": commentID, "Q1": choose1, "Q2": choose2, "Q3": choose3, "Q4": choose4, "Q5": choose5}
 
@@ -352,7 +388,7 @@ with st.container():
 
                 delete_options = list(session_state._state.keys())  # Get the keys for delete options
                 delete_options.insert(0, 'None')  # Add 'None' as the default option
-                delete_key = st.selectbox("__Select data to delete:__", delete_options)
+                delete_key = st.selectbox("Select data to delete:", delete_options)
                 if delete_key != 'None':
                     deleted_data = session_state.get(delete_key, None)
                     if deleted_data:
@@ -363,7 +399,7 @@ with st.container():
                         st.warning(f"No data found for key {delete_key}")
 
                 # Display the session data
-                st.write("__Session Data:__")
+                st.write("Session Data:")
                 if session_state._state:
                     for key, stored_data in session_state._state.items():
                         st.write(f"Key: {key}, Data: {stored_data}")   
@@ -373,7 +409,7 @@ with st.container():
             # Dropdown menu for selecting previous evaluations
             edit_options = list(session_state._state.keys())  # Get the keys for edit options
             edit_options.insert(0, 'None')  # Add 'None' as the default option
-            edit_key = st.selectbox("__Select data to edit:__", edit_options)
+            edit_key = st.selectbox("Select data to edit:", edit_options)
 
             if edit_key != 'None':
                 # Display the selected evaluation data
@@ -390,19 +426,19 @@ with st.container():
 
                     if edited_post:
                         # Display the post content
-                        st.write("__Title:__ ", edited_post.get('title'))
-                        st.write("__Post ID:__ ", edited_post.get('id'))
-                        st.write("__Author:__ ", edited_post.get('author'))
+                        st.write(f"Title: {edited_post.get('title')}")
+                        st.write("Post ID:", edited_post.get('id'))
+                        st.write("Author:", edited_post.get('author'))
 
                         permalink = edited_post.get('permalink')
                         base_url = "https://www.reddit.com"
                         full_url = base_url + permalink
-                        st.write("__URL:__ ", full_url)
+                        st.write("URL:", full_url)
 
                         # Check if there's a thumbnail and it's not "self" or null
                         thumbnail = edited_post.get('thumbnail')
                         if thumbnail and thumbnail != "self" and thumbnail != "null":
-                            st.write("__Thumbnail URL:__ " + str(thumbnail))
+                            st.write("Thumbnail URL: " + str(thumbnail))
                             if thumbnail != "nsfw" and thumbnail != "spoiler":
                                 # Display the image using st.image
                                 st.image(thumbnail, caption='Thumbnail Image', width=edited_post.get('thumbnail_width'))
@@ -410,19 +446,19 @@ with st.container():
                                 st.write("Click on URL to see image. Cannot display here.")
 
                         # Display the post content
-                        st.write("__Post Content:__ ", edited_post.get('selftext'))
+                        st.write("Post Content:", edited_post.get('selftext'))
 
-                        st.write("__Comments:__ ")
+                        st.write("Comments:")
                         for comment in edited_post.get('comments'):
                             display_comments(comment, level=0, parent_comment_author=edited_post.get('author'))
 
                         # Display the previous evaluation for editing
-                        st.write("__Previous Evaluation:__")
-                        choose1_edit = st.radio("__To the best of your knowledge is this truthful?__", choices, index=choose_index(edited_data["Q1"]), key="choose1_edit")
-                        choose2_edit = st.radio("__If false how harmful would this information be?__", choices, index=choose_index(edited_data["Q2"]), key="choose2_edit")
-                        choose3_edit = st.radio("__Does this information come from supported information?__", choices, index=choose_index(edited_data["Q3"]), key="choose3_edit")
-                        choose4_edit = st.radio("__Does this response answer the initial question?__", choices, index=choose_index(edited_data["Q4"]), key="choose4_edit")
-                        choose5_edit = st.radio("__Does response show evidence of reasoning?__", choices, index=choose_index(edited_data["Q5"]), key="choose5_edit")
+                        st.write("Previous Evaluation:")
+                        choose1_edit = st.radio("To the best of your knowledge is this truthful?", choices, index=choose_index(edited_data["Q1"]))
+                        choose2_edit = st.radio("If false how harmful would this information be?", choices, index=choose_index(edited_data["Q2"]))
+                        choose3_edit = st.radio("Does this information come from supported information?", choices, index=choose_index(edited_data["Q3"]))
+                        choose4_edit = st.radio("Does this response answer the initial question?", choices, index=choose_index(edited_data["Q4"]))
+                        choose5_edit = st.radio("Does response show evidence of reasoning?", choices, index=choose_index(edited_data["Q5"]))
 
                         edited_data_edit = {
                             "Username": edited_data["Username"],
@@ -435,7 +471,7 @@ with st.container():
                             "Q5": choose5_edit,
                         }
 
-                        if st.button("__Save Edits__"):
+                        if st.button("Save Edits"):
                             session_state.set(edit_key, edited_data_edit)
                             update_or_append_data(gc, sheet_url, edited_data_edit, action='update')  # Update Google Sheets on saving edits
                             st.success(f"Edits saved for data '{edited_data_edit}' with key {edit_key}")
