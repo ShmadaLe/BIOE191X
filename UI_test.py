@@ -1,14 +1,67 @@
 import streamlit as st
 import gspread
-from google.oauth2 import service_account
 import json
 import random
+import os
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 st.set_page_config(page_title='Label Medical Misinformation', page_icon=':face_with_thermometer:', layout='wide')
 
 # Initialize Google Sheets with service account credentials
-gc = gspread.service_account(filename='llms-for-misinformation-196fdd9cebe7.json')
-credentials = service_account.Credentials.from_service_account_file('llms-for-misinformation-196fdd9cebe7.json')
+# gc = gspread.service_account(filename='llms-for-misinformation-196fdd9cebe7.json')
+os.environ["reddit_data"]="reddit_dummy_data.json"
+secrets_dict = {
+    "type": st.secrets["type"],
+    "project_id": st.secrets["project_id"],
+    "private_key_id": st.secrets["private_key_id"],
+    "private_key": st.secrets["private_key"],
+    "client_email": st.secrets["client_email"],
+    "client_id": st.secrets["client_id"],
+    "auth_uri": st.secrets["auth_uri"],
+    "token_uri": st.secrets["token_uri"],
+    "auth_provider_x509_cert_url": st.secrets["auth_provider_x509_cert_url"],
+    "client_x509_cert_url": st.secrets["client_x509_cert_url"],
+    "universe_domain": st.secrets["universe_domain"],
+}
+
+
+
+# Replace with the ID of the file you want to access (can be found in the file's URL)
+FILE_ID = '1-N2U3DM1-RLbmM0ezSSj_r1jBwdDrwOU'
+
+# Get the current working directory
+CURRENT_DIRECTORY = os.getcwd()
+st.write(CURRENT_DIRECTORY)
+credentials=service_account.Credentials.from_service_account_info(secrets_dict)
+# Build the Google Drive API client
+drive_service = build('drive', 'v3', credentials=credentials)
+st.write("build complete")
+# Retrieve the file metadata
+file_metadata = drive_service.files().get(fileId=FILE_ID).execute()
+
+# Get the file name
+file_name = file_metadata['name']
+
+# Check if the file already exists locally
+local_file_path = os.path.join(CURRENT_DIRECTORY, file_name)
+if not os.path.exists(local_file_path):
+    # Download the file
+    st.write("got here")
+    request = drive_service.files().get_media(fileId=FILE_ID)
+    
+    with open(local_file_path, 'wb') as file:
+        media_request = request.execute()
+        file.write(media_request)
+    st.write("complete")
+    
+st.write(f"File '{file_name}' has been downloaded to '{local_file_path}'.")
+os.environ["reddit_data"] = "reddit_data1.json"
+
+
+gc = gspread.service_account_from_dict(secrets_dict)
+
+# Public Google Sheet URL (replace with your URL)
 
 
 # Public Google Sheet URL (replace with your URL)
@@ -61,6 +114,63 @@ class SessionState:
     def delete(self, key):
         if key in self._state:
             del self._state[key]
+
+class JsonData:
+    def __init__(self, data):
+        self.new_data = {}
+        for subreddit, posts in data.items():
+            self.new_data[subreddit] = []
+
+            for post in posts:
+                # Check the number of comments at depth=0
+                comments_depth_0 = [comment for comment in post['comments'] if comment['depth'] == 0]
+
+                if comments_depth_0:
+                    for i, comment in enumerate(comments_depth_0):
+                        # Create a new post with metadata including comment index
+                        new_post = {
+                            'title': post['title'],
+                            'author': post['author'],
+                            'id': post['id'],
+                            'permalink': post['permalink'],
+                            'selftext': post['selftext'],
+                            'comments': [comment],  # Only include the comment at depth=0
+                            'comment_body': comment['body'],
+                            'comment_index': i,  # Add the comment index
+                            'thumbnail': post['thumbnail'],
+                            'thumbnail_width': post['thumbnail_width']
+                        }
+                        self.new_data[subreddit].append(new_post)
+
+    def get_posts_in_subreddit(self, subreddit):
+        return self.new_data[subreddit]
+    
+    def merge_data_set(self, data):
+        for subreddit, posts in data.items():
+            if subreddit not in self.new_data.keys():
+                self.new_data[subreddit] = []
+            for post in posts:
+                # Check the number of comments at depth=0
+                comments_depth_0 = [comment for comment in post['comments'] if comment['depth'] == 0]
+
+                if comments_depth_0:
+                    for i, comment in enumerate(comments_depth_0):
+                        # Create a new post with metadata including comment index
+                        new_post = {
+                            'title': post['title'],
+                            'author': post['author'],
+                            'id': post['id'],
+                            'permalink': post['permalink'],
+                            'selftext': post['selftext'],
+                            'comments': [comment],  # Only include the comment at depth=0
+                            'comment_body': comment['body'],
+                            'comment_index': i,  # Add the comment index
+                            'thumbnail': post['thumbnail'],
+                            'thumbnail_width': post['thumbnail_width'],
+                            # does the below work?
+                            'has_thumbnail': 1 if post['thumbnail'] else 0
+                        }
+                        self.new_data[subreddit].append(new_post)
 
 # Create a session state
 session_state = SessionState(st.session_state)
