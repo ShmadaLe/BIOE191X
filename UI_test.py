@@ -138,7 +138,9 @@ class JsonData:
                             'comment_body': comment['body'],
                             'comment_index': i,  # Add the comment index
                             'thumbnail': post['thumbnail'],
-                            'thumbnail_width': post['thumbnail_width']
+                            'thumbnail_width': post['thumbnail_width'],
+                             # does the below work?
+                            'has_thumbnail': 1 if post['thumbnail'] else 0
                         }
                         self.new_data[subreddit].append(new_post)
 
