@@ -100,7 +100,7 @@ def update_or_append_data(gc, sheet_url, user_input, action):
 
     if action == 'update' and found_index != -1:
         # Update the existing row with the new data
-        worksheet.update(f"A{found_index + 1}:J{found_index + 1}", [list(user_input.values())])
+        worksheet.update(f"A{found_index + 1}:I{found_index + 1}", [list(user_input.values())])
         st.success("Data updated in Google Sheets.")
     elif action == 'delete':
         # Delete the row from the worksheet
@@ -129,14 +129,13 @@ def load_previous_evaluations(gc, sheet_url, userID):
             subreddit = row[1]
             postID = row[2]
             commentID = row[3]
-            filterOption = row[4]
-            q1 = row[5]
-            q2 = row[6]
-            q3 = row[7]
-            q4 = row[8]
-            q5 = row[9]
-            full_eval = {"Username": userID, "Subreddit": subreddit, "Reddit Post ID": postID, "Comment ID": commentID, "Filter Option": filterOption, "Q1": q1, "Q2": q2, "Q3": q3, "Q4": q4, "Q5": q5}
-            evaluations.append(((userID, subreddit, postID, commentID, filterOption), full_eval))
+            q1 = row[4]
+            q2 = row[5]
+            q3 = row[6]
+            q4 = row[7]
+            q5 = row[8]
+            full_eval = {"Username": userID, "Subreddit": subreddit, "Reddit Post ID": postID, "Comment ID": commentID, "Q1": q1, "Q2": q2, "Q3": q3, "Q4": q4, "Q5": q5}
+            evaluations.append(((userID, subreddit, postID, commentID), full_eval))
 
     return evaluations
 
@@ -427,9 +426,9 @@ with st.container():
                 choose4 = st.radio("__Does this response answer the initial question?__", choices)
                 choose5 = st.radio("__Does the response show evidence of reasoning?__", choices)
 
-                user_input = {"Username": userID, "Subreddit": selected_subreddit, "Reddit Post ID": postID, "Comment ID": commentID, "Filter Option": image_filter_option, "Q1": choose1, "Q2": choose2, "Q3": choose3, "Q4": choose4, "Q5": choose5}
+                user_input = {"Username": userID, "Subreddit": selected_subreddit, "Reddit Post ID": postID, "Comment ID": commentID, "Q1": choose1, "Q2": choose2, "Q3": choose3, "Q4": choose4, "Q5": choose5}
 
-                key = (userID, selected_subreddit, postID, commentID, image_filter_option)  # Use a tuple as the key
+                key = (userID, selected_subreddit, postID, commentID)  # Use a tuple as the key
 
                 if st.button("Submit"):
                     if user_input:
@@ -516,7 +515,6 @@ with st.container():
                             "Subreddit": edited_data["Subreddit"],
                             "Reddit Post ID": postID_edit,
                             "Comment ID": commentID_edit,
-                            "Filter Option": edited_data["Filter Option"],
                             "Q1": choose1_edit,
                             "Q2": choose2_edit,
                             "Q3": choose3_edit,
