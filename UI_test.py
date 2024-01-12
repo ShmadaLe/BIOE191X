@@ -1,67 +1,14 @@
 import streamlit as st
 import gspread
+from google.oauth2 import service_account
 import json
 import random
-import os
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
 
 st.set_page_config(page_title='Label Medical Misinformation', page_icon=':face_with_thermometer:', layout='wide')
 
 # Initialize Google Sheets with service account credentials
-# gc = gspread.service_account(filename='llms-for-misinformation-196fdd9cebe7.json')
-os.environ["reddit_data"]="reddit_dummy_data.json"
-secrets_dict = {
-    "type": st.secrets["type"],
-    "project_id": st.secrets["project_id"],
-    "private_key_id": st.secrets["private_key_id"],
-    "private_key": st.secrets["private_key"],
-    "client_email": st.secrets["client_email"],
-    "client_id": st.secrets["client_id"],
-    "auth_uri": st.secrets["auth_uri"],
-    "token_uri": st.secrets["token_uri"],
-    "auth_provider_x509_cert_url": st.secrets["auth_provider_x509_cert_url"],
-    "client_x509_cert_url": st.secrets["client_x509_cert_url"],
-    "universe_domain": st.secrets["universe_domain"],
-}
-
-
-
-# Replace with the ID of the file you want to access (can be found in the file's URL)
-FILE_ID = '1-N2U3DM1-RLbmM0ezSSj_r1jBwdDrwOU'
-
-# Get the current working directory
-CURRENT_DIRECTORY = os.getcwd()
-st.write(CURRENT_DIRECTORY)
-credentials=service_account.Credentials.from_service_account_info(secrets_dict)
-# Build the Google Drive API client
-drive_service = build('drive', 'v3', credentials=credentials)
-st.write("build complete")
-# Retrieve the file metadata
-file_metadata = drive_service.files().get(fileId=FILE_ID).execute()
-
-# Get the file name
-file_name = file_metadata['name']
-
-# Check if the file already exists locally
-local_file_path = os.path.join(CURRENT_DIRECTORY, file_name)
-if not os.path.exists(local_file_path):
-    # Download the file
-    st.write("got here")
-    request = drive_service.files().get_media(fileId=FILE_ID)
-    
-    with open(local_file_path, 'wb') as file:
-        media_request = request.execute()
-        file.write(media_request)
-    st.write("complete")
-    
-st.write(f"File '{file_name}' has been downloaded to '{local_file_path}'.")
-os.environ["reddit_data"] = "reddit_data1.json"
-
-
-gc = gspread.service_account_from_dict(secrets_dict)
-
-# Public Google Sheet URL (replace with your URL)
+gc = gspread.service_account(filename='llms-for-misinformation-196fdd9cebe7.json')
+credentials = service_account.Credentials.from_service_account_file('llms-for-misinformation-196fdd9cebe7.json')
 
 
 # Public Google Sheet URL (replace with your URL)
@@ -99,6 +46,7 @@ h2 {
 # Apply CSS to the whole app
 st.markdown(css, unsafe_allow_html=True)
 
+# class to save the session state so when the page reruns, the loaded data and info doesn't change
 class SessionState:
     def __init__(self, session):
         if 'data' not in session:
@@ -114,65 +62,6 @@ class SessionState:
     def delete(self, key):
         if key in self._state:
             del self._state[key]
-
-class JsonData:
-    def __init__(self, data):
-        self.new_data = {}
-        for subreddit, posts in data.items():
-            self.new_data[subreddit] = []
-
-            for post in posts:
-                # Check the number of comments at depth=0
-                comments_depth_0 = [comment for comment in post['comments'] if comment['depth'] == 0]
-
-                if comments_depth_0:
-                    for i, comment in enumerate(comments_depth_0):
-                        # Create a new post with metadata including comment index
-                        new_post = {
-                            'title': post['title'],
-                            'author': post['author'],
-                            'id': post['id'],
-                            'permalink': post['permalink'],
-                            'selftext': post['selftext'],
-                            'comments': [comment],  # Only include the comment at depth=0
-                            'comment_body': comment['body'],
-                            'comment_index': i,  # Add the comment index
-                            'thumbnail': post['thumbnail'],
-                            'thumbnail_width': post['thumbnail_width'],
-                             # does the below work?
-                            'has_thumbnail': 1 if post['thumbnail'] else 0
-                        }
-                        self.new_data[subreddit].append(new_post)
-
-    def get_posts_in_subreddit(self, subreddit):
-        return self.new_data[subreddit]
-    
-    def merge_data_set(self, data):
-        for subreddit, posts in data.items():
-            if subreddit not in self.new_data.keys():
-                self.new_data[subreddit] = []
-            for post in posts:
-                # Check the number of comments at depth=0
-                comments_depth_0 = [comment for comment in post['comments'] if comment['depth'] == 0]
-
-                if comments_depth_0:
-                    for i, comment in enumerate(comments_depth_0):
-                        # Create a new post with metadata including comment index
-                        new_post = {
-                            'title': post['title'],
-                            'author': post['author'],
-                            'id': post['id'],
-                            'permalink': post['permalink'],
-                            'selftext': post['selftext'],
-                            'comments': [comment],  # Only include the comment at depth=0
-                            'comment_body': comment['body'],
-                            'comment_index': i,  # Add the comment index
-                            'thumbnail': post['thumbnail'],
-                            'thumbnail_width': post['thumbnail_width'],
-                            # does the below work?
-                            'has_thumbnail': 1 if post['thumbnail'] else 0
-                        }
-                        self.new_data[subreddit].append(new_post)
 
 # Create a session state
 session_state = SessionState(st.session_state)
@@ -205,13 +94,13 @@ def update_or_append_data(gc, sheet_url, user_input, action):
     # Find the index (row) of the matching userID and postID
     found_index = -1
     for i, row in enumerate(values):
-        if len(row) >= 2 and row[0] == user_input["Username"] and row[1] == user_input["Reddit Post ID"]:
+        if len(row) >= 2 and row[0] == user_input["Username"] and row[2] == user_input["Reddit Post ID"]:
             found_index = i
             break
 
     if action == 'update' and found_index != -1:
         # Update the existing row with the new data
-        worksheet.update(f"A{found_index + 1}:H{found_index + 1}", [list(user_input.values())])
+        worksheet.update(f"A{found_index + 1}:J{found_index + 1}", [list(user_input.values())])
         st.success("Data updated in Google Sheets.")
     elif action == 'delete':
         # Delete the row from the worksheet
@@ -237,17 +126,79 @@ def load_previous_evaluations(gc, sheet_url, userID):
     # Find evaluations for the given userID
     for row in values:
         if len(row) >= 2 and row[0] == userID:
-            postID = row[1]
-            commentID = row[2]
-            q1 = row[3]
-            q2 = row[4]
-            q3 = row[5]
-            q4 = row[6]
-            q5 = row[7]
-            full_eval = {"Username": userID, "Reddit Post ID": postID, "Comment ID": commentID, "Q1": q1, "Q2": q2, "Q3": q3, "Q4": q4, "Q5": q5}
-            evaluations.append(((userID, postID, commentID), full_eval))
+            subreddit = row[1]
+            postID = row[2]
+            commentID = row[3]
+            filterOption = row[4]
+            q1 = row[5]
+            q2 = row[6]
+            q3 = row[7]
+            q4 = row[8]
+            q5 = row[9]
+            full_eval = {"Username": userID, "Subreddit": subreddit, "Reddit Post ID": postID, "Comment ID": commentID, "Filter Option": filterOption, "Q1": q1, "Q2": q2, "Q3": q3, "Q4": q4, "Q5": q5}
+            evaluations.append(((userID, subreddit, postID, commentID, filterOption), full_eval))
 
     return evaluations
+
+class JsonData:
+    def __init__(self, data):
+        self.new_data = {}
+        for subreddit, posts in data.items():
+            self.new_data[subreddit] = set()
+
+            for post in posts:
+                # Check the number of comments at depth=0
+                comments_depth_0 = [comment for comment in post['comments'] if comment['depth'] == 0]
+
+                if comments_depth_0:
+                    for i, comment in enumerate(comments_depth_0):
+                        # Create a new post with metadata including comment index
+                        new_post = {
+                            'subreddit': subreddit,
+                            'title': post['title'],
+                            'author': post['author'],
+                            'id': post['id'],
+                            'permalink': post['permalink'],
+                            'selftext': post['selftext'],
+                            'comments': [comment],  # Only include the comment at depth=0
+                            'comment_body': comment['body'],
+                            'comment_index': i,  # Add the comment index
+                            'thumbnail': post['thumbnail'],
+                            'thumbnail_width': post['thumbnail_width'],
+                            'has_thumbnail': 1 if post['thumbnail'] not in ["self", "null", "default"] else 0
+                        }
+                        self.new_data[subreddit].add(new_post)
+
+    def get_posts_in_subreddit(self, subreddit):
+        return self.new_data[subreddit]
+    
+    def merge_data_set(self, data):
+        for subreddit, posts in data.items():
+            if subreddit not in self.new_data.keys():
+                self.new_data[subreddit] = set()
+            for post in posts:
+                # Check the number of comments at depth=0
+                comments_depth_0 = [comment for comment in post['comments'] if comment['depth'] == 0]
+
+                if comments_depth_0:
+                    for i, comment in enumerate(comments_depth_0):
+                        # Create a new post with metadata including comment index
+                        new_post = {
+                            'subreddit': subreddit,
+                            'title': post['title'],
+                            'author': post['author'],
+                            'id': post['id'],
+                            'permalink': post['permalink'],
+                            'selftext': post['selftext'],
+                            'comments': [comment],  # Only include the comment at depth=0
+                            'comment_body': comment['body'],
+                            'comment_index': i,  # Add the comment index
+                            'thumbnail': post['thumbnail'],
+                            'thumbnail_width': post['thumbnail_width'],
+                            'has_thumbnail': 1 if post['thumbnail'] not in ["self", "null", "default"] else 0
+                        }
+                        self.new_data[subreddit].add(new_post)
+                        
 
 def preprocess_json_data(data):
     new_data = {}
@@ -262,6 +213,7 @@ def preprocess_json_data(data):
                 for i, comment in enumerate(comments_depth_0):
                     # Create a new post with metadata including comment index
                     new_post = {
+                        'subreddit': subreddit,
                         'title': post['title'],
                         'author': post['author'],
                         'id': post['id'],
@@ -271,29 +223,48 @@ def preprocess_json_data(data):
                         'comment_body': comment['body'],
                         'comment_index': i,  # Add the comment index
                         'thumbnail': post['thumbnail'],
-                        'thumbnail_width': post['thumbnail_width']
+                        'thumbnail_width': post['thumbnail_width'],
+                        'has_thumbnail': 1 if post['thumbnail'] not in ["self", "null", "default"] else 0
                     }
                     new_data[subreddit].append(new_post)
 
     return new_data
 
-def load_random_post(selected_subreddit, userID):
+def load_random_post(selected_subreddit, userID, filter_option):
     if selected_subreddit in data:
         all_posts = data[selected_subreddit]
         if all_posts:
-            # Filter out posts with no comments and specific authors
-            valid_posts = [
-                post for post in all_posts
-                if post.get('comments') != "[Removed]"  # Check if comments are not "[Removed]"
-                and post.get('comments') and not all(comment['author'] == 'AutoModerator' or comment['author'] == 'None' for comment in post['comments'])
-                and (userID, post.get('id'), post.get('comment_index')) not in session_state._state
-            ]
+            validSet=set()
+            valid_posts = []
+            
+            for post in all_posts:
+                # Check for image availability based on the filter option
+                has_image = post['has_thumbnail']
+                
+                # Check if comments are not "[Removed]" and filter specific authors
+                has_valid_comments = (post.get('comments') != "[Removed]" and 
+                                      post.get('comments') and 
+                                      not all(comment['author'] == 'AutoModerator' or comment['author'] == 'None' for comment in post['comments']))
+                
+                # Check if the post has not been seen by the user
+                is_unseen = (userID, post.get('id'), str(post.get('comment_index'))) not in session_state._state.keys()
+               
+                # Apply filters based on the filter_option and other conditions
+                if ((filter_option == 'All Posts' or
+                     (filter_option == 'Only Posts With Images' and has_image) or
+                     (filter_option == 'Only Posts Without Images' and not has_image)) and
+                    has_valid_comments and is_unseen):
+                    if (post.get('id'), str(post.get('comment_index'))) not in validSet:
+                        validSet.add((post.get('id'), str(post.get('comment_index'))))
+                        valid_posts.append(post)
+              
+            
             if valid_posts:
-
-                # Should I add functionality here to add the random_post to a list and to choose a different choice if the valid post has already been shown?
-
+                st.warning("you have "+ str(len(valid_posts))+" left in this subreddit for this filter")
                 random_post = random.choice(valid_posts)
                 return random_post
+            else:
+                return None
     return None
 
 def load_post_by_id(data, selected_subreddit, postID, commentID):
@@ -386,17 +357,18 @@ with st.container():
             if evaluations[0] not in session_state._state:
                 session_state.set(evaluations[0], evaluations[1])
 
-        # I would already have all of the data split up head of time. How should I access it?
-        # Could take selected_subreddit as a string and concatenate to front of '_output.json'
-        # Would need to maybe add to session state?
-        # load_random_post currently adds a single random post to session state. Maybe I should add preprocessing to scrape sheets and not load in a certain postID, commentID if already seen
-        # list will be ongoing after the preprocess
-        # max file size: 25 MB per file
-
         # Load your JSON data
         with open('reddit_data1.json', 'r') as json_file:
             data = json.load(json_file)
             data = preprocess_json_data(data)
+            for key in data.keys():
+                if data.get(key) == None:
+                    del data[key]
+
+        image_filter_option = st.sidebar.radio(
+            "Filter posts by image availability:",
+            ('All Posts', 'Only Posts With Images', 'Only Posts Without Images')
+        )
 
         # Create a Streamlit dropdown menu for subreddit selection
         selected_subreddit = st.sidebar.selectbox("__Select a Subreddit__", list(data.keys()))
@@ -406,7 +378,7 @@ with st.container():
                 st.session_state.random_post = None
 
             # Load a new random post and store it in the session state
-            st.session_state.random_post = load_random_post(selected_subreddit, userID)
+            st.session_state.random_post = load_random_post(selected_subreddit, userID, image_filter_option)
 
         # Get the updated random_post
         random_post = st.session_state.random_post
@@ -455,9 +427,9 @@ with st.container():
                 choose4 = st.radio("__Does this response answer the initial question?__", choices)
                 choose5 = st.radio("__Does the response show evidence of reasoning?__", choices)
 
-                user_input = {"Username": userID, "Reddit Post ID": postID, "Comment ID": commentID, "Q1": choose1, "Q2": choose2, "Q3": choose3, "Q4": choose4, "Q5": choose5}
+                user_input = {"Username": userID, "Subreddit": selected_subreddit, "Reddit Post ID": postID, "Comment ID": commentID, "Filter Option": image_filter_option, "Q1": choose1, "Q2": choose2, "Q3": choose3, "Q4": choose4, "Q5": choose5}
 
-                key = (userID, postID, commentID)  # Use a tuple as the key
+                key = (userID, selected_subreddit, postID, commentID, image_filter_option)  # Use a tuple as the key
 
                 if st.button("Submit"):
                     if user_input:
@@ -541,8 +513,10 @@ with st.container():
 
                         edited_data_edit = {
                             "Username": edited_data["Username"],
+                            "Subreddit": edited_data["Subreddit"],
                             "Reddit Post ID": postID_edit,
                             "Comment ID": commentID_edit,
+                            "Filter Option": edited_data["Filter Option"],
                             "Q1": choose1_edit,
                             "Q2": choose2_edit,
                             "Q3": choose3_edit,
@@ -557,5 +531,3 @@ with st.container():
 
                 else:
                     st.warning("No data selected for editing")
-
-
