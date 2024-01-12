@@ -144,7 +144,7 @@ class JsonData:
     def __init__(self, data):
         self.new_data = {}
         for subreddit, posts in data.items():
-            self.new_data[subreddit] = set()
+            self.new_data[subreddit] = []
 
             for post in posts:
                 # Check the number of comments at depth=0
@@ -167,7 +167,7 @@ class JsonData:
                             'thumbnail_width': post['thumbnail_width'],
                             'has_thumbnail': 1 if post['thumbnail'] not in ["self", "null", "default"] else 0
                         }
-                        self.new_data[subreddit].add(new_post)
+                        self.new_data[subreddit].append(new_post)
 
     def get_posts_in_subreddit(self, subreddit):
         return self.new_data[subreddit]
@@ -175,7 +175,7 @@ class JsonData:
     def merge_data_set(self, data):
         for subreddit, posts in data.items():
             if subreddit not in self.new_data.keys():
-                self.new_data[subreddit] = set()
+                self.new_data[subreddit] = []
             for post in posts:
                 # Check the number of comments at depth=0
                 comments_depth_0 = [comment for comment in post['comments'] if comment['depth'] == 0]
@@ -197,7 +197,7 @@ class JsonData:
                             'thumbnail_width': post['thumbnail_width'],
                             'has_thumbnail': 1 if post['thumbnail'] not in ["self", "null", "default"] else 0
                         }
-                        self.new_data[subreddit].add(new_post)
+                        self.new_data[subreddit].append(new_post)
                         
 
 def preprocess_json_data(data):
